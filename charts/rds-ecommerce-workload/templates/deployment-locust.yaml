@@ -1,0 +1,45 @@
+{{- if .Values.locust.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust-loadgenerator
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: locust-loadgenerator
+    app.kubernetes.io/name: locust-loadgenerator
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.locust.replicas }}
+  selector:
+    matchLabels:
+      app: locust-loadgenerator
+  template:
+    metadata:
+      labels:
+        app: locust-loadgenerator
+    spec:
+      containers:
+        - name: locust
+          image: "{{ .Values.locust.image.repository }}:{{ .Values.locust.image.tag }}"
+          imagePullPolicy: {{ .Values.locust.image.pullPolicy }}
+          command:
+            - locust
+            - -f
+            - /scripts/locustfile.py
+            - --host
+            - {{ .Values.locust.targetHost | quote }}
+            - --headless
+            - -u
+            - {{ .Values.locust.users | quote }}
+            - -r
+            - {{ .Values.locust.spawnRate | quote }}
+          volumeMounts:
+            - name: locust-scripts
+              mountPath: /scripts
+          resources:
+            {{- toYaml .Values.locust.resources | nindent 12 }}
+      volumes:
+        - name: locust-scripts
+          configMap:
+            name: locust-scripts
+{{- end }}

@@ -1,0 +1,13 @@
+apiVersion: v2
+name: rds-ecommerce-workload
+description: Production-grade E-Commerce PostgreSQL Microservice, Prometheus Exporter, and Locust Load Generator on EKS for RDS Multi-AZ DB Cluster
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - postgresql
+  - rds-multi-az
+  - e-commerce
+  - failover
+  - locust
+  - prometheus

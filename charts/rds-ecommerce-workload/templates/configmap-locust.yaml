@@ -1,0 +1,68 @@
+{{- if .Values.locust.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: locust-scripts
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: locust-loadgenerator
+    app.kubernetes.io/name: locust-loadgenerator
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  locustfile.py: |
+    import random
+    import json
+    import logging
+    from locust import HttpUser, task, between
+
+    class EcommerceShopperUser(HttpUser):
+        wait_time = between(0.1, 0.5)
+
+        def on_start(self):
+            self.customer_id = "a0000000-0000-0000-0000-000000000002"
+            self.product_ids = [
+                "b0000000-0000-0000-0000-000000000001",
+                "b0000000-0000-0000-0000-000000000002",
+                "b0000000-0000-0000-0000-000000000003",
+                "b0000000-0000-0000-0000-000000000004"
+            ]
+
+        @task(5)
+        def browse_catalog(self):
+            """Read-heavy query routed to RDS Reader endpoint."""
+            with self.client.get("/api/v1/products", catch_response=True) as resp:
+                if resp.status_code == 200:
+                    resp.success()
+                else:
+                    resp.failure(f"Catalog query failed: {resp.status_code} - {resp.text}")
+
+        @task(3)
+        def place_order(self):
+            """Write transaction routed to RDS Primary / Proxy with inventory locking."""
+            selected_product = random.choice(self.product_ids)
+            payload = {
+                "customer_id": self.customer_id,
+                "items": [
+                    {
+                        "product_id": selected_product,
+                        "quantity": random.randint(1, 2)
+                    }
+                ],
+                "shipping_address": {
+                    "street": "100 Cloud Native Blvd",
+                    "city": "Austin",
+                    "state": "TX",
+                    "zip": "78701"
+                }
+            }
+            with self.client.post("/api/v1/orders", json=payload, catch_response=True) as resp:
+                if resp.status_code in [200, 201]:
+                    resp.success()
+                else:
+                    resp.failure(f"Order placement failed: {resp.status_code} - {resp.text}")
+
+        @task(1)
+        def check_db_health(self):
+            """Monitors connected node topology and failover state."""
+            self.client.get("/api/v1/db-info")
+{{- end }}

@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pgbench-stress-runner
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: pgbench-runner
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: pgbench-runner
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: pgbench
+          image: postgres:16-alpine
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting pgbench initialization..."
+              export PGPASSWORD="$DB_PASSWORD"
+              export PGSSLMODE="require"
+              # Initialize benchmark tables if not present (-i: init, -s: scale factor 10 -> 1M rows)
+              pgbench -i -s 10 -h "$DB_WRITE_HOST" -p "$DB_PORT" -U "$DB_USER" "$DB_NAME" || true
+              
+              echo "Running benchmark test (50 clients, 8 threads, 30 seconds)..."
+              pgbench -c 50 -j 8 -T 30 -h "$DB_WRITE_HOST" -p "$DB_PORT" -U "$DB_USER" "$DB_NAME"
+          env:
+            - name: DB_WRITE_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: rds-db-credentials
+                  key: DB_WRITE_HOST
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: rds-db-credentials
+                  key: DB_PORT
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: rds-db-credentials
+                  key: DB_NAME
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rds-db-credentials
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rds-db-credentials
+                  key: DB_PASSWORD

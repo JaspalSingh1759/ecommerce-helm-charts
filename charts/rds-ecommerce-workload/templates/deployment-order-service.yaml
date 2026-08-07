@@ -1,0 +1,115 @@
+{{- if .Values.orderService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-inventory-service
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: order-inventory-service
+    app.kubernetes.io/name: order-inventory-service
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.orderService.replicas }}
+  selector:
+    matchLabels:
+      app: order-inventory-service
+  template:
+    metadata:
+      labels:
+        app: order-inventory-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      terminationGracePeriodSeconds: 30
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: "topology.kubernetes.io/zone"
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: order-inventory-service
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "2"
+          - name: timeout
+            value: "2"
+          - name: attempts
+            value: "3"
+      containers:
+        - name: order-inventory-service
+          image: "{{ .Values.orderService.image.repository }}:{{ .Values.orderService.image.tag }}"
+          imagePullPolicy: {{ .Values.orderService.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: DB_WRITE_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: rds-db-credentials
+                  key: DB_WRITE_HOST
+            - name: DB_READ_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: rds-db-credentials
+                  key: DB_READ_HOST
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: rds-db-credentials
+                  key: DB_PORT
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: rds-db-credentials
+                  key: DB_NAME
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rds-db-credentials
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rds-db-credentials
+                  key: DB_PASSWORD
+            - name: DB_POOL_MIN
+              value: {{ .Values.database.pool.min | quote }}
+            - name: DB_POOL_MAX
+              value: {{ .Values.database.pool.max | quote }}
+            - name: DB_TIMEOUT_SEC
+              value: {{ .Values.database.pool.timeoutSec | quote }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          resources:
+            {{- toYaml .Values.orderService.resources | nindent 12 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: order-inventory-service-pdb
+  namespace: {{ .Values.namespace }}
+spec:
+  minAvailable: {{ .Values.orderService.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app: order-inventory-service
+{{- end }}
